@@ -1,11 +1,32 @@
 import subprocess
 import re
+import unicodedata
 
 # Function to get clipboard content on macOS
 def get_clipboard_content():
     process = subprocess.Popen(['pbpaste'], stdout=subprocess.PIPE)
     clipboard_data, _ = process.communicate()
     return clipboard_data.decode('utf-8')
+
+# Detect non-printable Unicode characters or potential obfuscation
+def detect_hidden_input(code):
+    hidden_issues = []
+    
+    # Check for zero-width characters (Zero-width space, zero-width non-joiner, etc.)
+    zero_width_chars = re.findall(r'[\u200B\u200C\u200D\uFEFF]', code)
+    if zero_width_chars:
+        hidden_issues.append("Zero-width characters detected, possible obfuscation.")
+
+    # Check for Right-to-Left Override characters (RTLO)
+    if '\u202E' in code:
+        hidden_issues.append("Right-to-left override character detected (U+202E), potential file name or code obfuscation.")
+
+    # Check for non-standard Unicode characters (e.g., Cyrillic 'a' vs Latin 'a')
+    normalized_code = unicodedata.normalize('NFKC', code)
+    if code != normalized_code:
+        hidden_issues.append("Homoglyphs detected (non-standard Unicode characters that resemble ASCII characters).")
+
+    return hidden_issues
 
 # Define a function to check for vulnerable patterns and extract the problematic content
 def check_for_vulnerabilities(code):
@@ -29,7 +50,10 @@ def check_for_vulnerabilities(code):
     if import_matches:
         vulnerabilities.append(("Insecure library imports detected", import_matches))
 
-    # More checks can be added as needed for other vulnerabilities
+    # Detect hidden inputs or obfuscation
+    hidden_issues = detect_hidden_input(code)
+    if hidden_issues:
+        vulnerabilities.append(("Hidden or obfuscated content detected", hidden_issues))
 
     return vulnerabilities
 
